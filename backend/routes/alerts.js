@@ -49,9 +49,11 @@ router.post('/config/testar-email', async (req, res) => {
   );
   try {
     const usuario = await db.buscarUsuarioPorId(req.usuario.id);
+    console.log(`📧 Tentando enviar email de teste para ${usuario?.email_alertas || usuario?.email}`);
     await Promise.race([enviarEmailTeste(usuario), timeout]);
     res.json({ mensagem: 'Email de teste enviado com sucesso!' });
   } catch (e) {
+    console.error('❌ Erro no email de teste:', e.message);
     res.status(500).json({ erro: `Falha ao enviar email: ${e.message}` });
   }
 });
