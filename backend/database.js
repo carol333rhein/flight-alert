@@ -100,6 +100,23 @@ async function inicializar() {
     db.run('INSERT OR IGNORE INTO configuracoes (chave, valor) VALUES (?, ?)', [chave, valor]);
   }
 
+  // Migrações: adiciona colunas que podem não existir em bancos antigos
+  const colunasMigracao = [
+    { tabela: 'rotas', coluna: 'user_id', def: 'INTEGER' },
+    { tabela: 'rotas', coluna: 'tipo_voo', def: "TEXT DEFAULT 'ida_volta'" },
+    { tabela: 'rotas', coluna: 'flexivel', def: 'BOOLEAN DEFAULT 0' },
+    { tabela: 'rotas', coluna: 'ultimo_alerta_normal', def: 'DATETIME' },
+    { tabela: 'rotas', coluna: 'ultimo_alerta_tarifario', def: 'DATETIME' },
+  ];
+  for (const { tabela, coluna, def } of colunasMigracao) {
+    try {
+      db.run(`ALTER TABLE ${tabela} ADD COLUMN ${coluna} ${def}`);
+      console.log(`🔧 Migração: coluna ${tabela}.${coluna} adicionada.`);
+    } catch {
+      // Coluna já existe — ignorar
+    }
+  }
+
   salvar();
   console.log('✅ Banco de dados inicializado:', DB_PATH);
   return db;
@@ -120,6 +137,15 @@ function buscarUsuarioPorEmail(email) {
 
 function buscarUsuarioPorId(id) {
   return queryOne('SELECT id, nome, email, email_alertas, criada_em FROM usuarios WHERE id = ?', [id]);
+}
+
+function contarUsuarios() {
+  const row = db.exec('SELECT COUNT(*) FROM usuarios')[0];
+  return row?.values?.[0]?.[0] ?? 0;
+}
+
+function adotarRotasOrfas(userId) {
+  return run('UPDATE rotas SET user_id = ? WHERE user_id IS NULL', [userId]);
 }
 
 function atualizarUsuario(id, campos) {
@@ -204,7 +230,7 @@ function getTodasConfigs() {
 
 module.exports = {
   inicializar,
-  criarUsuario, buscarUsuarioPorEmail, buscarUsuarioPorId, atualizarUsuario,
+  criarUsuario, buscarUsuarioPorEmail, buscarUsuarioPorId, atualizarUsuario, contarUsuarios, adotarRotasOrfas,
   listarRotas, listarRotasAtivas, buscarRota, criarRota, atualizarRota, deletarRota,
   salvarHistorico, buscarHistorico, calcularMedia,
   getConfig, setConfig, getTodasConfigs,

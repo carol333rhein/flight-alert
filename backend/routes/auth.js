@@ -19,9 +19,15 @@ router.post('/registro', async (req, res) => {
     if (db.buscarUsuarioPorEmail(email)) {
       return res.status(409).json({ erro: 'Este email já está cadastrado.' });
     }
+    const ePrimeiroUsuario = db.contarUsuarios() === 0;
     const senha_hash = await bcrypt.hash(senha, 10);
-    const resultado = db.criarUsuario({ nome, email, senha_hash });
-    const usuario = db.buscarUsuarioPorId(resultado.lastInsertRowid);
+    const resultado = db.criarUsuario({ nome, email, senha_hash, email_alertas: req.body.email_alertas });
+    const novoId = resultado.lastInsertRowid;
+    // Primeiro usuário herda rotas órfãs (sem user_id) do banco legado
+    if (ePrimeiroUsuario) {
+      db.adotarRotasOrfas(novoId);
+    }
+    const usuario = db.buscarUsuarioPorId(novoId);
     const token = gerarToken(usuario);
     res.status(201).json({ token, usuario });
   } catch (e) {
