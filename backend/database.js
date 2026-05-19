@@ -1,7 +1,13 @@
 const fs = require('fs');
 const path = require('path');
 
-const DB_PATH = path.join(__dirname, '..', 'flight-alert.db');
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'flight-alert.db');
+
+// Garante que o diretório do banco existe
+const dbDir = path.dirname(DB_PATH);
+if (!require('fs').existsSync(dbDir)) {
+  require('fs').mkdirSync(dbDir, { recursive: true });
+}
 
 let db = null;
 
