@@ -6,7 +6,7 @@ const db = require('./database');
  * Retorna o voo mais barato encontrado ou null em caso de erro.
  */
 async function buscarPrecos(origem, destino, dataIda, dataVolta, tipoVoo = 'ida_volta') {
-  const apiKey = db.getConfig('serpapi_key') || process.env.SERPAPI_KEY;
+  const apiKey = await db.getConfig('serpapi_key') || process.env.SERPAPI_KEY;
 
   if (!apiKey) {
     console.error('❌ SerpAPI Key não configurada.');
