@@ -104,6 +104,9 @@ async function iniciarScheduler() {
     timezone: 'America/Sao_Paulo',
   });
 
+  // Roda imediatamente ao iniciar para não depender da primeira janela do cron
+  verificarTodasRotas().catch(err => console.error('❌ Erro na verificação inicial:', err.message));
+
   return tarefaAgendada;
 }
 

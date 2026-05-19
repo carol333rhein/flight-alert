@@ -25,6 +25,8 @@ app.get('/api/status', (req, res) => {
   });
 });
 
+app.get('/api/ping', (req, res) => res.send('pong'));
+
 // Em produção, serve o frontend buildado
 if (process.env.NODE_ENV === 'production') {
   const fs = require('fs');
