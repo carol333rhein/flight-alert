@@ -1,16 +1,11 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import axios from 'axios';
-
-const CAMPOS_INICIAIS = {
-  serpapi_key: '',
-  email_user: '',
-  email_pass: '',
-  email_to: '',
-  frequencia_horas: '6',
-};
+import { useAuth } from '../context/AuthContext';
 
 export default function Configuracoes() {
-  const [form, setForm] = useState(CAMPOS_INICIAIS);
+  const { usuario } = useAuth();
+  const [form, setForm] = useState({ serpapi_key: '', frequencia_horas: '6' });
   const [salvando, setSalvando] = useState(false);
   const [testando, setTestando] = useState(false);
   const [msg, setMsg] = useState({ tipo: '', texto: '' });
@@ -56,7 +51,7 @@ export default function Configuracoes() {
       <div className="pagina-header">
         <div>
           <h1 className="pagina-titulo">Configurações</h1>
-          <p className="pagina-subtitulo">Configure suas chaves de API e preferências de alerta</p>
+          <p className="pagina-subtitulo">Configurações globais do Flight Alert</p>
         </div>
       </div>
 
@@ -69,12 +64,12 @@ export default function Configuracoes() {
         <div className="form-card">
           <h3 className="secao-titulo">🔍 SerpAPI — Google Flights</h3>
           <p className="secao-desc">
-            A SerpAPI é usada para consultar preços do Google Flights. Crie sua conta em{' '}
+            A SerpAPI consulta preços no Google Flights. Crie sua conta em{' '}
             <a href="https://serpapi.com" target="_blank" rel="noopener noreferrer">serpapi.com</a>{' '}
-            e copie sua API Key.
+            e copie sua API Key. O plano gratuito permite 100 buscas/mês.
           </p>
           <div className="form-group">
-            <label>SerpAPI Key *</label>
+            <label>SerpAPI Key</label>
             <input
               type="text"
               className="input input-mono"
@@ -85,67 +80,10 @@ export default function Configuracoes() {
           </div>
         </div>
 
-        {/* Email */}
-        <div className="form-card">
-          <h3 className="secao-titulo">📧 Configuração de Email</h3>
-          <p className="secao-desc">
-            Use uma conta Gmail com{' '}
-            <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener noreferrer">
-              Senha de App
-            </a>{' '}
-            (não sua senha normal — ative a verificação em 2 etapas antes).
-          </p>
-
-          <div className="form-row">
-            <div className="form-group">
-              <label>Gmail Remetente *</label>
-              <input
-                type="email"
-                className="input"
-                placeholder="seugmail@gmail.com"
-                value={form.email_user}
-                onChange={e => setForm(p => ({ ...p, email_user: e.target.value }))}
-              />
-            </div>
-
-            <div className="form-group">
-              <label>Senha de App *</label>
-              <input
-                type="password"
-                className="input"
-                placeholder="xxxx xxxx xxxx xxxx"
-                value={form.email_pass}
-                onChange={e => setForm(p => ({ ...p, email_pass: e.target.value }))}
-                autoComplete="new-password"
-              />
-              <span className="campo-dica">Senha gerada em Conta Google → Segurança → Senhas de App</span>
-            </div>
-          </div>
-
-          <div className="form-group">
-            <label>Email Destinatário (onde receberá os alertas) *</label>
-            <input
-              type="email"
-              className="input"
-              placeholder="seugmail@gmail.com"
-              value={form.email_to}
-              onChange={e => setForm(p => ({ ...p, email_to: e.target.value }))}
-            />
-          </div>
-
-          <button
-            type="button"
-            className="btn btn-secundario"
-            onClick={testarEmail}
-            disabled={testando}
-          >
-            {testando ? '⏳ Enviando...' : '📧 Enviar email de teste'}
-          </button>
-        </div>
-
         {/* Frequência */}
         <div className="form-card">
           <h3 className="secao-titulo">⏰ Frequência de Verificação</h3>
+          <p className="secao-desc">Com que frequência o sistema verifica os preços de todas as rotas ativas.</p>
           <div className="form-group">
             <label>Verificar preços a cada</label>
             <select
@@ -171,6 +109,28 @@ export default function Configuracoes() {
           </button>
         </div>
       </form>
+
+      {/* Alertas de email — por usuário */}
+      <div className="form-card" style={{ marginTop: 20 }}>
+        <h3 className="secao-titulo">📧 Email de Alertas</h3>
+        <p className="secao-desc">
+          Os alertas são enviados para o email configurado no seu perfil.
+          Atualmente: <strong>{usuario?.email_alertas || usuario?.email}</strong>
+        </p>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <Link to="/perfil" className="btn btn-secundario">
+            ✏️ Alterar email de alertas
+          </Link>
+          <button
+            type="button"
+            className="btn btn-verificar"
+            onClick={testarEmail}
+            disabled={testando}
+          >
+            {testando ? '⏳ Enviando...' : '📧 Enviar email de teste'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
