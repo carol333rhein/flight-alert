@@ -1,8 +1,8 @@
 const { createClient } = require('@supabase/supabase-js');
 
 const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY
+  process.env.SUPABASE_URL || 'https://qopwanwcdilltwwoqtfh.supabase.co',
+  process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFvcHdhbndjZGlsbHR3d29xdGZoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyMTgxNTcsImV4cCI6MjA5NDc5NDE1N30.a5WRHxux034gXKrM97KWM-Za_Z4qd9bcfj2Ss8PsxJ0'
 );
 
 async function inicializar() {
