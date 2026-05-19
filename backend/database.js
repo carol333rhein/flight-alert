@@ -1,237 +1,170 @@
-const fs = require('fs');
-const path = require('path');
+const { createClient } = require('@supabase/supabase-js');
 
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'flight-alert.db');
-
-// Garante que o diretório do banco existe
-const dbDir = path.dirname(DB_PATH);
-if (!require('fs').existsSync(dbDir)) {
-  require('fs').mkdirSync(dbDir, { recursive: true });
-}
-
-let db = null;
-
-function salvar() {
-  const data = db.export();
-  fs.writeFileSync(DB_PATH, Buffer.from(data));
-}
-
-function query(sql, params) {
-  const stmt = db.prepare(sql);
-  const rows = [];
-  if (params && params.length) stmt.bind(params);
-  while (stmt.step()) {
-    rows.push(stmt.getAsObject());
-  }
-  stmt.free();
-  return rows;
-}
-
-function queryOne(sql, params) {
-  return query(sql, params)[0] || null;
-}
-
-function run(sql, params) {
-  db.run(sql, params || []);
-  const lastId = db.exec('SELECT last_insert_rowid() as id')[0]?.values?.[0]?.[0] ?? null;
-  const changes = db.getRowsModified();
-  salvar();
-  return { lastInsertRowid: lastId, changes };
-}
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY
+);
 
 async function inicializar() {
-  const initSqlJs = require('sql.js');
-  const SQL = await initSqlJs();
-
-  if (fs.existsSync(DB_PATH)) {
-    db = new SQL.Database(fs.readFileSync(DB_PATH));
-  } else {
-    db = new SQL.Database();
+  const { error } = await supabase.from('configuracoes').select('chave').limit(1);
+  if (error) throw new Error('Falha ao conectar ao Supabase: ' + error.message);
+  if (process.env.SERPAPI_KEY) {
+    await supabase.from('configuracoes')
+      .upsert({ chave: 'serpapi_key', valor: process.env.SERPAPI_KEY }, { onConflict: 'chave' });
   }
-
-  db.run(`
-    CREATE TABLE IF NOT EXISTS usuarios (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      nome TEXT NOT NULL,
-      email TEXT UNIQUE NOT NULL,
-      senha_hash TEXT NOT NULL,
-      email_alertas TEXT,
-      criada_em DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-
-  db.run(`
-    CREATE TABLE IF NOT EXISTS rotas (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER REFERENCES usuarios(id),
-      origem TEXT NOT NULL,
-      destino TEXT NOT NULL,
-      data_ida TEXT,
-      data_volta TEXT,
-      flexivel BOOLEAN DEFAULT 0,
-      preco_maximo REAL NOT NULL,
-      ativa BOOLEAN DEFAULT 1,
-      tipo_voo TEXT DEFAULT 'ida_volta',
-      ultimo_alerta_normal DATETIME,
-      ultimo_alerta_tarifario DATETIME,
-      criada_em DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-
-  db.run(`
-    CREATE TABLE IF NOT EXISTS historico_precos (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      rota_id INTEGER,
-      preco REAL NOT NULL,
-      moeda TEXT DEFAULT 'BRL',
-      cia_aerea TEXT,
-      link_compra TEXT,
-      verificado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (rota_id) REFERENCES rotas(id)
-    )
-  `);
-
-  db.run(`
-    CREATE TABLE IF NOT EXISTS configuracoes (
-      chave TEXT PRIMARY KEY,
-      valor TEXT NOT NULL
-    )
-  `);
-
-  const defaults = [
-    ['serpapi_key', process.env.SERPAPI_KEY || ''],
-    ['frequencia_horas', '6'],
-  ];
-  for (const [chave, valor] of defaults) {
-    db.run('INSERT OR IGNORE INTO configuracoes (chave, valor) VALUES (?, ?)', [chave, valor]);
-  }
-
-  // Migrações: adiciona colunas que podem não existir em bancos antigos
-  const colunasMigracao = [
-    { tabela: 'rotas', coluna: 'user_id', def: 'INTEGER' },
-    { tabela: 'rotas', coluna: 'tipo_voo', def: "TEXT DEFAULT 'ida_volta'" },
-    { tabela: 'rotas', coluna: 'flexivel', def: 'BOOLEAN DEFAULT 0' },
-    { tabela: 'rotas', coluna: 'ultimo_alerta_normal', def: 'DATETIME' },
-    { tabela: 'rotas', coluna: 'ultimo_alerta_tarifario', def: 'DATETIME' },
-  ];
-  for (const { tabela, coluna, def } of colunasMigracao) {
-    try {
-      db.run(`ALTER TABLE ${tabela} ADD COLUMN ${coluna} ${def}`);
-      console.log(`🔧 Migração: coluna ${tabela}.${coluna} adicionada.`);
-    } catch {
-      // Coluna já existe — ignorar
-    }
-  }
-
-  salvar();
-  console.log('✅ Banco de dados inicializado:', DB_PATH);
-  return db;
+  console.log('✅ Supabase (PostgreSQL) conectado.');
 }
 
 // --- Usuários ---
 
-function criarUsuario(dados) {
-  return run(
-    'INSERT INTO usuarios (nome, email, senha_hash, email_alertas) VALUES (?, ?, ?, ?)',
-    [dados.nome, dados.email.toLowerCase(), dados.senha_hash, dados.email_alertas || dados.email.toLowerCase()]
-  );
+async function criarUsuario(dados) {
+  const { data, error } = await supabase.from('usuarios')
+    .insert({
+      nome: dados.nome,
+      email: dados.email.toLowerCase(),
+      senha_hash: dados.senha_hash,
+      email_alertas: dados.email_alertas || dados.email.toLowerCase(),
+    })
+    .select('id, nome, email, email_alertas, criada_em')
+    .single();
+  if (error) throw new Error(error.message);
+  return data;
 }
 
-function buscarUsuarioPorEmail(email) {
-  return queryOne('SELECT * FROM usuarios WHERE email = ?', [email.toLowerCase()]);
+async function buscarUsuarioPorEmail(email) {
+  const { data } = await supabase.from('usuarios').select('*').eq('email', email.toLowerCase()).maybeSingle();
+  return data || null;
 }
 
-function buscarUsuarioPorId(id) {
-  return queryOne('SELECT id, nome, email, email_alertas, criada_em FROM usuarios WHERE id = ?', [id]);
+async function buscarUsuarioPorId(id) {
+  const { data } = await supabase.from('usuarios').select('id, nome, email, email_alertas, criada_em').eq('id', id).maybeSingle();
+  return data || null;
 }
 
-function contarUsuarios() {
-  const row = db.exec('SELECT COUNT(*) FROM usuarios')[0];
-  return row?.values?.[0]?.[0] ?? 0;
+async function atualizarUsuario(id, campos) {
+  const { data, error } = await supabase.from('usuarios')
+    .update(campos)
+    .eq('id', id)
+    .select('id, nome, email, email_alertas, criada_em')
+    .single();
+  if (error) throw new Error(error.message);
+  return data;
 }
 
-function adotarRotasOrfas(userId) {
-  return run('UPDATE rotas SET user_id = ? WHERE user_id IS NULL', [userId]);
+async function contarUsuarios() {
+  const { count } = await supabase.from('usuarios').select('*', { count: 'exact', head: true });
+  return count ?? 0;
 }
 
-function atualizarUsuario(id, campos) {
-  const chaves = Object.keys(campos);
-  const sets = chaves.map(k => `${k} = ?`).join(', ');
-  const valores = [...chaves.map(k => campos[k]), id];
-  return run(`UPDATE usuarios SET ${sets} WHERE id = ?`, valores);
+async function adotarRotasOrfas(userId) {
+  await supabase.from('rotas').update({ user_id: userId }).is('user_id', null);
 }
 
-// --- Rotas (com user_id) ---
+// --- Rotas ---
 
-function listarRotas(userId) {
-  return query('SELECT * FROM rotas WHERE user_id = ? ORDER BY criada_em DESC', [userId]);
+async function listarRotas(userId) {
+  const { data } = await supabase.from('rotas').select('*').eq('user_id', userId).order('criada_em', { ascending: false });
+  return data || [];
 }
 
-function listarRotasAtivas() {
-  return query('SELECT r.*, u.email_alertas FROM rotas r JOIN usuarios u ON r.user_id = u.id WHERE r.ativa = 1');
+async function listarRotasAtivas() {
+  const { data } = await supabase.from('rotas')
+    .select('*, usuarios(email_alertas)')
+    .eq('ativa', true);
+  return (data || []).map(({ usuarios, ...rota }) => ({
+    ...rota,
+    email_alertas: usuarios?.email_alertas || null,
+  }));
 }
 
-function buscarRota(id) {
-  return queryOne('SELECT * FROM rotas WHERE id = ?', [id]);
+async function buscarRota(id) {
+  const { data } = await supabase.from('rotas').select('*').eq('id', id).maybeSingle();
+  return data || null;
 }
 
-function criarRota(dados) {
-  return run(
-    'INSERT INTO rotas (user_id, origem, destino, tipo_voo, data_ida, data_volta, flexivel, preco_maximo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    [dados.user_id, dados.origem, dados.destino, dados.tipo_voo ?? 'ida_volta', dados.data_ida ?? null, dados.data_volta ?? null, dados.flexivel ?? 0, dados.preco_maximo]
-  );
+async function criarRota(dados) {
+  const { data, error } = await supabase.from('rotas')
+    .insert({
+      user_id: dados.user_id,
+      origem: dados.origem,
+      destino: dados.destino,
+      tipo_voo: dados.tipo_voo ?? 'ida_volta',
+      data_ida: dados.data_ida ?? null,
+      data_volta: dados.data_volta ?? null,
+      flexivel: dados.flexivel ?? false,
+      preco_maximo: dados.preco_maximo,
+    })
+    .select('*')
+    .single();
+  if (error) throw new Error(error.message);
+  return data;
 }
 
-function atualizarRota(id, campos) {
-  const chaves = Object.keys(campos);
-  const sets = chaves.map(k => `${k} = ?`).join(', ');
-  const valores = [...chaves.map(k => campos[k]), id];
-  return run(`UPDATE rotas SET ${sets} WHERE id = ?`, valores);
+async function atualizarRota(id, campos) {
+  const { data, error } = await supabase.from('rotas').update(campos).eq('id', id).select('*').single();
+  if (error) throw new Error(error.message);
+  return data;
 }
 
-function deletarRota(id) {
-  run('DELETE FROM historico_precos WHERE rota_id = ?', [id]);
-  return run('DELETE FROM rotas WHERE id = ?', [id]);
+async function deletarRota(id) {
+  // historico_precos tem ON DELETE CASCADE
+  await supabase.from('rotas').delete().eq('id', id);
 }
 
 // --- Histórico ---
 
-function salvarHistorico(dados) {
-  return run(
-    'INSERT INTO historico_precos (rota_id, preco, moeda, cia_aerea, link_compra) VALUES (?, ?, ?, ?, ?)',
-    [dados.rota_id, dados.preco, dados.moeda || 'BRL', dados.cia_aerea || null, dados.link_compra || null]
-  );
+async function salvarHistorico(dados) {
+  const { data, error } = await supabase.from('historico_precos')
+    .insert({
+      rota_id: dados.rota_id,
+      preco: dados.preco,
+      moeda: dados.moeda || 'BRL',
+      cia_aerea: dados.cia_aerea || null,
+      link_compra: dados.link_compra || null,
+    })
+    .select('*')
+    .single();
+  if (error) throw new Error(error.message);
+  return data;
 }
 
-function buscarHistorico(rotaId) {
-  return query('SELECT * FROM historico_precos WHERE rota_id = ? ORDER BY verificado_em DESC', [rotaId]);
+async function buscarHistorico(rotaId) {
+  const { data } = await supabase.from('historico_precos')
+    .select('*')
+    .eq('rota_id', rotaId)
+    .order('verificado_em', { ascending: false });
+  return data || [];
 }
 
-function calcularMedia(rotaId, limite = 30) {
-  const rows = db.exec(`
-    SELECT AVG(preco) as media FROM (
-      SELECT preco FROM historico_precos
-      WHERE rota_id = ${Number(rotaId)}
-      ORDER BY verificado_em DESC
-      LIMIT ${Number(limite)}
-    )
-  `);
-  return rows[0]?.values?.[0]?.[0] || null;
+async function calcularMedia(rotaId, limite = 30) {
+  const { data } = await supabase.from('historico_precos')
+    .select('preco')
+    .eq('rota_id', rotaId)
+    .order('verificado_em', { ascending: false })
+    .limit(limite);
+  if (!data?.length) return null;
+  return data.reduce((sum, r) => sum + r.preco, 0) / data.length;
 }
 
-// --- Configurações globais ---
+// --- Configurações ---
 
-function getConfig(chave) {
-  return queryOne('SELECT valor FROM configuracoes WHERE chave = ?', [chave])?.valor || null;
+async function getConfig(chave) {
+  const { data } = await supabase.from('configuracoes').select('valor').eq('chave', chave).maybeSingle();
+  return data?.valor || null;
 }
 
-function setConfig(chave, valor) {
-  return run('INSERT OR REPLACE INTO configuracoes (chave, valor) VALUES (?, ?)', [chave, valor]);
+async function setConfig(chave, valor) {
+  const { data, error } = await supabase.from('configuracoes')
+    .upsert({ chave, valor }, { onConflict: 'chave' })
+    .select('*')
+    .single();
+  if (error) throw new Error(error.message);
+  return data;
 }
 
-function getTodasConfigs() {
-  const rows = query('SELECT chave, valor FROM configuracoes');
-  return Object.fromEntries(rows.map(r => [r.chave, r.valor]));
+async function getTodasConfigs() {
+  const { data } = await supabase.from('configuracoes').select('chave, valor');
+  return Object.fromEntries((data || []).map(r => [r.chave, r.valor]));
 }
 
 module.exports = {

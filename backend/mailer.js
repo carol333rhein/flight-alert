@@ -1,12 +1,9 @@
 const nodemailer = require('nodemailer');
 const db = require('./database');
 
-/**
- * Cria o transporte Nodemailer usando as configurações do banco.
- */
-function criarTransporte() {
-  const user = db.getConfig('email_user') || process.env.EMAIL_USER;
-  const pass = db.getConfig('email_pass') || process.env.EMAIL_PASS;
+async function criarTransporte() {
+  const user = (await db.getConfig('email_user')) || process.env.EMAIL_USER;
+  const pass = (await db.getConfig('email_pass')) || process.env.EMAIL_PASS;
 
   if (!user || !pass) {
     throw new Error('Credenciais de email não configuradas.');
@@ -19,12 +16,9 @@ function criarTransporte() {
 }
 
 function getEmailDestino(usuario) {
-  return usuario?.email_alertas || usuario?.email || db.getConfig('email_to') || process.env.EMAIL_TO;
+  return usuario?.email_alertas || usuario?.email || process.env.EMAIL_TO;
 }
 
-/**
- * Layout base HTML compartilhado pelos emails.
- */
 function layoutBase({ corBanner, tituloBanner, icone, conteudo }) {
   return `
 <!DOCTYPE html>
@@ -68,69 +62,43 @@ function layoutBase({ corBanner, tituloBanner, icone, conteudo }) {
 </html>`;
 }
 
-/**
- * Envia alerta normal quando preço está abaixo do limite definido.
- */
 async function enviarAlertaNormal(rota, preco, link, usuario) {
-  const transporte = criarTransporte();
+  const transporte = await criarTransporte();
   const destino = getEmailDestino(usuario);
   const nomeRota = `${rota.origem} → ${rota.destino}`;
   const desconto = Math.round(((rota.preco_maximo - preco) / rota.preco_maximo) * 100);
+  const emailUser = (await db.getConfig('email_user')) || process.env.EMAIL_USER;
 
   const conteudo = `
     <div class="rota">✈️ ${nomeRota}</div>
     <div class="preco-destaque">R$ ${preco.toFixed(2)}</div>
     <div class="info-box">
-      <div class="info-row">
-        <span class="info-label">Preço encontrado</span>
-        <span class="info-valor" style="color:#16a34a">R$ ${preco.toFixed(2)}</span>
-      </div>
-      <div class="info-row">
-        <span class="info-label">Seu limite máximo</span>
-        <span class="info-valor">R$ ${rota.preco_maximo.toFixed(2)}</span>
-      </div>
-      <div class="info-row">
-        <span class="info-label">Economia</span>
-        <span class="info-valor" style="color:#16a34a">${desconto}% abaixo do seu limite</span>
-      </div>
-      ${rota.data_ida ? `
-      <div class="info-row">
-        <span class="info-label">Data de ida</span>
-        <span class="info-valor">${formatarData(rota.data_ida)}</span>
-      </div>` : ''}
-      ${rota.data_volta ? `
-      <div class="info-row">
-        <span class="info-label">Data de volta</span>
-        <span class="info-valor">${formatarData(rota.data_volta)}</span>
-      </div>` : ''}
+      <div class="info-row"><span class="info-label">Preço encontrado</span><span class="info-valor" style="color:#16a34a">R$ ${preco.toFixed(2)}</span></div>
+      <div class="info-row"><span class="info-label">Seu limite máximo</span><span class="info-valor">R$ ${rota.preco_maximo.toFixed(2)}</span></div>
+      <div class="info-row"><span class="info-label">Economia</span><span class="info-valor" style="color:#16a34a">${desconto}% abaixo do seu limite</span></div>
+      ${rota.data_ida ? `<div class="info-row"><span class="info-label">Data de ida</span><span class="info-valor">${formatarData(rota.data_ida)}</span></div>` : ''}
+      ${rota.data_volta ? `<div class="info-row"><span class="info-label">Data de volta</span><span class="info-valor">${formatarData(rota.data_volta)}</span></div>` : ''}
     </div>
     <a href="${link}" class="btn">Ver passagem agora →</a>
     <p style="text-align:center;color:#666;font-size:13px;">Preço verificado em ${new Date().toLocaleString('pt-BR')}</p>
   `;
 
   await transporte.sendMail({
-    from: `"✈️ Flight Alert" <${db.getConfig('email_user')}>`,
+    from: `"✈️ Flight Alert" <${emailUser}>`,
     to: destino,
     subject: `🎯 Passagem abaixo do limite: ${nomeRota} — R$ ${preco.toFixed(2)}`,
-    html: layoutBase({
-      corBanner: '#2563eb',
-      tituloBanner: 'Alerta de Preço!',
-      icone: '🎯',
-      conteudo,
-    }),
+    html: layoutBase({ corBanner: '#2563eb', tituloBanner: 'Alerta de Preço!', icone: '🎯', conteudo }),
   });
 
   console.log(`📧 Alerta normal enviado para ${destino}: ${nomeRota} R$ ${preco}`);
 }
 
-/**
- * Envia alerta de possível erro tarifário quando preço é 40%+ abaixo da média histórica.
- */
 async function enviarAlertaErroTarifario(rota, preco, media, link, usuario) {
-  const transporte = criarTransporte();
+  const transporte = await criarTransporte();
   const destino = getEmailDestino(usuario);
   const nomeRota = `${rota.origem} → ${rota.destino}`;
   const percentualDesconto = Math.round(((media - preco) / media) * 100);
+  const emailUser = (await db.getConfig('email_user')) || process.env.EMAIL_USER;
 
   const conteudo = `
     <div style="background:#fef2f2;border:2px solid #ef4444;border-radius:8px;padding:16px;margin-bottom:24px;text-align:center;">
@@ -140,78 +108,46 @@ async function enviarAlertaErroTarifario(rota, preco, media, link, usuario) {
     <div class="rota">✈️ ${nomeRota}</div>
     <div class="preco-destaque" style="color:#dc2626;">R$ ${preco.toFixed(2)}</div>
     <div class="info-box">
-      <div class="info-row">
-        <span class="info-label">Preço encontrado</span>
-        <span class="info-valor" style="color:#dc2626">R$ ${preco.toFixed(2)}</span>
-      </div>
-      <div class="info-row">
-        <span class="info-label">Média histórica (últimos 30 registros)</span>
-        <span class="info-valor">R$ ${media.toFixed(2)}</span>
-      </div>
-      <div class="info-row">
-        <span class="info-label">Desconto sobre a média</span>
-        <span class="info-valor" style="color:#dc2626;font-size:18px;">${percentualDesconto}% OFF 🔥</span>
-      </div>
-      <div class="info-row">
-        <span class="info-label">Seu limite máximo</span>
-        <span class="info-valor">R$ ${rota.preco_maximo.toFixed(2)}</span>
-      </div>
-      ${rota.data_ida ? `
-      <div class="info-row">
-        <span class="info-label">Data de ida</span>
-        <span class="info-valor">${formatarData(rota.data_ida)}</span>
-      </div>` : ''}
+      <div class="info-row"><span class="info-label">Preço encontrado</span><span class="info-valor" style="color:#dc2626">R$ ${preco.toFixed(2)}</span></div>
+      <div class="info-row"><span class="info-label">Média histórica (últimos 30)</span><span class="info-valor">R$ ${media.toFixed(2)}</span></div>
+      <div class="info-row"><span class="info-label">Desconto sobre a média</span><span class="info-valor" style="color:#dc2626;font-size:18px;">${percentualDesconto}% OFF 🔥</span></div>
+      <div class="info-row"><span class="info-label">Seu limite máximo</span><span class="info-valor">R$ ${rota.preco_maximo.toFixed(2)}</span></div>
     </div>
     <a href="${link}" class="btn" style="background:#dc2626;">🚨 Comprar antes que suba!</a>
     <p style="text-align:center;color:#666;font-size:13px;">Verificado em ${new Date().toLocaleString('pt-BR')} — Preços mudam rapidamente</p>
   `;
 
   await transporte.sendMail({
-    from: `"✈️ Flight Alert" <${db.getConfig('email_user')}>`,
+    from: `"✈️ Flight Alert" <${emailUser}>`,
     to: destino,
     subject: `🚨 POSSÍVEL ERRO TARIFÁRIO: ${nomeRota} — R$ ${preco.toFixed(2)} (${percentualDesconto}% off)`,
-    html: layoutBase({
-      corBanner: '#dc2626',
-      tituloBanner: 'POSSÍVEL ERRO TARIFÁRIO',
-      icone: '🚨',
-      conteudo,
-    }),
+    html: layoutBase({ corBanner: '#dc2626', tituloBanner: 'POSSÍVEL ERRO TARIFÁRIO', icone: '🚨', conteudo }),
   });
 
-  console.log(`📧 Alerta de erro tarifário enviado: ${nomeRota} R$ ${preco} (média: R$ ${media})`);
+  console.log(`📧 Alerta tarifário enviado: ${nomeRota} R$ ${preco} (média: R$ ${media})`);
 }
 
-/**
- * Envia um email de teste para confirmar as configurações.
- */
 async function enviarEmailTeste(usuario) {
-  const transporte = criarTransporte();
+  const transporte = await criarTransporte();
   const destino = getEmailDestino(usuario);
+  const emailUser = (await db.getConfig('email_user')) || process.env.EMAIL_USER;
 
   const conteudo = `
     <div style="text-align:center;padding:20px;">
       <div style="font-size:64px;margin-bottom:16px;">✅</div>
       <h2 style="color:#333;">Configuração funcionando!</h2>
-      <p style="color:#666;">Seu Flight Alert está configurado corretamente e pronto para monitorar passagens aéreas.</p>
+      <p style="color:#666;">Seu Flight Alert está configurado corretamente.</p>
       <div class="info-box" style="margin-top:24px;">
-        <div class="info-row">
-          <span class="info-label">Testado em</span>
-          <span class="info-valor">${new Date().toLocaleString('pt-BR')}</span>
-        </div>
+        <div class="info-row"><span class="info-label">Testado em</span><span class="info-valor">${new Date().toLocaleString('pt-BR')}</span></div>
       </div>
     </div>
   `;
 
   await transporte.sendMail({
-    from: `"✈️ Flight Alert" <${db.getConfig('email_user')}>`,
+    from: `"✈️ Flight Alert" <${emailUser}>`,
     to: destino,
     subject: '✅ Flight Alert — Teste de configuração',
-    html: layoutBase({
-      corBanner: '#16a34a',
-      tituloBanner: 'Email de Teste',
-      icone: '✅',
-      conteudo,
-    }),
+    html: layoutBase({ corBanner: '#16a34a', tituloBanner: 'Email de Teste', icone: '✅', conteudo }),
   });
 
   console.log(`📧 Email de teste enviado para ${destino}`);

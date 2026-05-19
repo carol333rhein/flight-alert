@@ -6,7 +6,7 @@ const { gerarToken, autenticar } = require('../middleware/auth');
 
 // POST /api/auth/registro
 router.post('/registro', async (req, res) => {
-  const { nome, email, senha } = req.body;
+  const { nome, email, senha, email_alertas } = req.body;
 
   if (!nome || !email || !senha) {
     return res.status(400).json({ erro: 'Nome, email e senha são obrigatórios.' });
@@ -16,18 +16,13 @@ router.post('/registro', async (req, res) => {
   }
 
   try {
-    if (db.buscarUsuarioPorEmail(email)) {
+    if (await db.buscarUsuarioPorEmail(email)) {
       return res.status(409).json({ erro: 'Este email já está cadastrado.' });
     }
-    const ePrimeiroUsuario = db.contarUsuarios() === 0;
+    const ePrimeiroUsuario = (await db.contarUsuarios()) === 0;
     const senha_hash = await bcrypt.hash(senha, 10);
-    const resultado = db.criarUsuario({ nome, email, senha_hash, email_alertas: req.body.email_alertas });
-    const novoId = resultado.lastInsertRowid;
-    // Primeiro usuário herda rotas órfãs (sem user_id) do banco legado
-    if (ePrimeiroUsuario) {
-      db.adotarRotasOrfas(novoId);
-    }
-    const usuario = db.buscarUsuarioPorId(novoId);
+    const usuario = await db.criarUsuario({ nome, email, senha_hash, email_alertas: email_alertas || email });
+    if (ePrimeiroUsuario) await db.adotarRotasOrfas(usuario.id);
     const token = gerarToken(usuario);
     res.status(201).json({ token, usuario });
   } catch (e) {
@@ -44,7 +39,7 @@ router.post('/login', async (req, res) => {
   }
 
   try {
-    const usuario = db.buscarUsuarioPorEmail(email);
+    const usuario = await db.buscarUsuarioPorEmail(email);
     if (!usuario) {
       return res.status(401).json({ erro: 'Email ou senha incorretos.' });
     }
@@ -60,24 +55,28 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// GET /api/auth/me — retorna dados do usuário logado
-router.get('/me', autenticar, (req, res) => {
-  const usuario = db.buscarUsuarioPorId(req.usuario.id);
-  if (!usuario) return res.status(404).json({ erro: 'Usuário não encontrado.' });
-  res.json(usuario);
+// GET /api/auth/me
+router.get('/me', autenticar, async (req, res) => {
+  try {
+    const usuario = await db.buscarUsuarioPorId(req.usuario.id);
+    if (!usuario) return res.status(404).json({ erro: 'Usuário não encontrado.' });
+    res.json(usuario);
+  } catch (e) {
+    res.status(500).json({ erro: e.message });
+  }
 });
 
-// PATCH /api/auth/perfil — atualiza nome e email de alertas
+// PATCH /api/auth/perfil
 router.patch('/perfil', autenticar, async (req, res) => {
   const { nome, email_alertas, senha_atual, nova_senha } = req.body;
   const update = {};
 
   if (nome) update.nome = nome;
-  if (email_alertas) update.email_alertas = email_alertas;
+  if (email_alertas !== undefined) update.email_alertas = email_alertas || null;
 
   if (nova_senha) {
     if (!senha_atual) return res.status(400).json({ erro: 'Informe a senha atual para alterá-la.' });
-    const usuario = db.buscarUsuarioPorEmail(req.usuario.email);
+    const usuario = await db.buscarUsuarioPorEmail(req.usuario.email);
     const correta = await bcrypt.compare(senha_atual, usuario.senha_hash);
     if (!correta) return res.status(401).json({ erro: 'Senha atual incorreta.' });
     if (nova_senha.length < 6) return res.status(400).json({ erro: 'Nova senha deve ter pelo menos 6 caracteres.' });
@@ -88,8 +87,12 @@ router.patch('/perfil', autenticar, async (req, res) => {
     return res.status(400).json({ erro: 'Nenhum campo para atualizar.' });
   }
 
-  db.atualizarUsuario(req.usuario.id, update);
-  res.json(db.buscarUsuarioPorId(req.usuario.id));
+  try {
+    const usuario = await db.atualizarUsuario(req.usuario.id, update);
+    res.json(usuario);
+  } catch (e) {
+    res.status(500).json({ erro: e.message });
+  }
 });
 
 module.exports = router;
