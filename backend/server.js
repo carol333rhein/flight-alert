@@ -17,11 +17,9 @@ app.use('/api/rotas', require('./routes/alerts'));
 app.use('/api/historico', require('./routes/history'));
 
 app.get('/api/status', (req, res) => {
-  const configs = db.getTodasConfigs();
   res.json({
     status: 'online',
     versao: '1.0.0',
-    configurado: !!(configs.serpapi_key && configs.email_user),
     agora: new Date().toISOString(),
   });
 });
@@ -35,23 +33,25 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-// Inicialização assíncrona (sql.js precisa carregar o WASM)
+// Escuta na porta IMEDIATAMENTE para o Railway não matar o processo por timeout
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`\n✈️  Flight Alert rodando na porta ${PORT}`);
+});
+
+// Inicializa o banco e o scheduler em background (sem bloquear o listen)
 async function main() {
-  await db.inicializar();
-
-  app.listen(PORT, () => {
-    console.log(`\n✈️  Flight Alert rodando em http://localhost:${PORT}`);
-    console.log(`📁 Banco de dados: flight-alert.db`);
-  });
-
-  if (process.env.NODE_ENV !== 'test') {
-    iniciarScheduler();
+  try {
+    await db.inicializar();
+    console.log('📁 Banco de dados pronto.');
+    if (process.env.NODE_ENV !== 'test') {
+      iniciarScheduler();
+    }
+  } catch (err) {
+    console.error('❌ Falha ao iniciar banco:', err);
+    process.exit(1);
   }
 }
 
-main().catch(err => {
-  console.error('❌ Falha ao iniciar:', err);
-  process.exit(1);
-});
+main();
 
 module.exports = app;
