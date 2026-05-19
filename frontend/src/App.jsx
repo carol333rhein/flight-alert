@@ -8,6 +8,8 @@ import Configuracoes from './pages/Configuracoes';
 import Login from './pages/Login';
 import Registro from './pages/Registro';
 import Perfil from './pages/Perfil';
+import EsqueciSenha from './pages/EsqueciSenha';
+import RedefinirSenha from './pages/RedefinirSenha';
 import './index.css';
 
 function RotaProtegida({ children }) {
@@ -33,6 +35,8 @@ function Layout() {
         <Routes>
           <Route path="/login" element={<RotaPublica><Login /></RotaPublica>} />
           <Route path="/registro" element={<RotaPublica><Registro /></RotaPublica>} />
+          <Route path="/esqueci-senha" element={<RotaPublica><EsqueciSenha /></RotaPublica>} />
+          <Route path="/redefinir-senha" element={<RotaPublica><RedefinirSenha /></RotaPublica>} />
           <Route path="/" element={<RotaProtegida><Home /></RotaProtegida>} />
           <Route path="/nova-rota" element={<RotaProtegida><NovaRota /></RotaProtegida>} />
           <Route path="/historico" element={<RotaProtegida><Historico /></RotaProtegida>} />

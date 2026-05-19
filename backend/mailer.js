@@ -159,4 +159,28 @@ function formatarData(dataStr) {
   return `${dia}/${mes}/${ano}`;
 }
 
-module.exports = { enviarAlertaNormal, enviarAlertaErroTarifario, enviarEmailTeste };
+async function enviarEmailRedefinicao(usuario, link) {
+  const transporte = await criarTransporte();
+  const emailUser = (await db.getConfig('email_user')) || process.env.EMAIL_USER;
+
+  const conteudo = `
+    <div style="text-align:center;padding:20px;">
+      <div style="font-size:56px;margin-bottom:16px;">🔐</div>
+      <h2 style="color:#333;">Redefinir sua senha</h2>
+      <p style="color:#666;margin-bottom:24px;">Clique no botão abaixo para criar uma nova senha. O link expira em <strong>1 hora</strong>.</p>
+      <a href="${link}" class="btn">Redefinir senha →</a>
+      <p style="color:#999;font-size:12px;margin-top:24px;">Se você não solicitou a redefinição, ignore este email. Sua senha não será alterada.</p>
+    </div>
+  `;
+
+  await transporte.sendMail({
+    from: `"✈️ Flight Alert" <${emailUser}>`,
+    to: usuario.email_alertas || usuario.email,
+    subject: '🔐 Flight Alert — Redefinir senha',
+    html: layoutBase({ corBanner: '#2563eb', tituloBanner: 'Redefinir Senha', icone: '🔐', conteudo }),
+  });
+
+  console.log(`📧 Email de redefinição enviado para ${usuario.email}`);
+}
+
+module.exports = { enviarAlertaNormal, enviarAlertaErroTarifario, enviarEmailTeste, enviarEmailRedefinicao };

@@ -56,6 +56,19 @@ async function contarUsuarios() {
   return count ?? 0;
 }
 
+async function salvarResetToken(userId, token, expira) {
+  await supabase.from('usuarios').update({ reset_token: token, reset_token_expira: expira.toISOString() }).eq('id', userId);
+}
+
+async function buscarPorResetToken(token) {
+  const { data } = await supabase.from('usuarios')
+    .select('id, nome, email, email_alertas')
+    .eq('reset_token', token)
+    .gt('reset_token_expira', new Date().toISOString())
+    .maybeSingle();
+  return data || null;
+}
+
 async function adotarRotasOrfas(userId) {
   await supabase.from('rotas').update({ user_id: userId }).is('user_id', null);
 }
@@ -170,6 +183,7 @@ async function getTodasConfigs() {
 module.exports = {
   inicializar,
   criarUsuario, buscarUsuarioPorEmail, buscarUsuarioPorId, atualizarUsuario, contarUsuarios, adotarRotasOrfas,
+  salvarResetToken, buscarPorResetToken,
   listarRotas, listarRotasAtivas, buscarRota, criarRota, atualizarRota, deletarRota,
   salvarHistorico, buscarHistorico, calcularMedia,
   getConfig, setConfig, getTodasConfigs,

@@ -71,6 +71,9 @@ export default function Login() {
         </form>
 
         <p className="auth-rodape">
+          <Link to="/esqueci-senha" style={{ color: 'var(--cinza-400)', fontSize: 13 }}>Esqueci a senha</Link>
+        </p>
+        <p className="auth-rodape">
           Não tem conta?{' '}
           <Link to="/registro">Criar conta</Link>
         </p>

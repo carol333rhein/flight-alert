@@ -1,8 +1,10 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const router = express.Router();
 const db = require('../database');
 const { gerarToken, autenticar } = require('../middleware/auth');
+const { enviarEmailRedefinicao } = require('../mailer');
 
 // POST /api/auth/registro
 router.post('/registro', async (req, res) => {
@@ -90,6 +92,48 @@ router.patch('/perfil', autenticar, async (req, res) => {
   try {
     const usuario = await db.atualizarUsuario(req.usuario.id, update);
     res.json(usuario);
+  } catch (e) {
+    res.status(500).json({ erro: e.message });
+  }
+});
+
+// POST /api/auth/esqueci-senha
+router.post('/esqueci-senha', async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ erro: 'Informe o email.' });
+
+  try {
+    const usuario = await db.buscarUsuarioPorEmail(email);
+    // Sempre retorna sucesso para não revelar se o email existe
+    if (!usuario) return res.json({ mensagem: 'Se o email estiver cadastrado, você receberá um link em breve.' });
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const expira = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
+    await db.salvarResetToken(usuario.id, token, expira);
+
+    const appUrl = process.env.APP_URL || 'https://flight-alert-production-5260.up.railway.app';
+    const link = `${appUrl}/redefinir-senha?token=${token}`;
+    await enviarEmailRedefinicao(usuario, link);
+
+    res.json({ mensagem: 'Se o email estiver cadastrado, você receberá um link em breve.' });
+  } catch (e) {
+    res.status(500).json({ erro: e.message });
+  }
+});
+
+// POST /api/auth/redefinir-senha
+router.post('/redefinir-senha', async (req, res) => {
+  const { token, nova_senha } = req.body;
+  if (!token || !nova_senha) return res.status(400).json({ erro: 'Token e nova senha são obrigatórios.' });
+  if (nova_senha.length < 6) return res.status(400).json({ erro: 'A senha deve ter pelo menos 6 caracteres.' });
+
+  try {
+    const usuario = await db.buscarPorResetToken(token);
+    if (!usuario) return res.status(400).json({ erro: 'Link inválido ou expirado. Solicite um novo.' });
+
+    const senha_hash = await bcrypt.hash(nova_senha, 10);
+    await db.atualizarUsuario(usuario.id, { senha_hash, reset_token: null, reset_token_expira: null });
+    res.json({ mensagem: 'Senha redefinida com sucesso! Faça login.' });
   } catch (e) {
     res.status(500).json({ erro: e.message });
   }
