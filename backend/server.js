@@ -26,10 +26,16 @@ app.get('/api/status', (req, res) => {
 
 // Em produção, serve o frontend buildado
 if (process.env.NODE_ENV === 'production') {
+  const fs = require('fs');
   const frontendPath = path.join(__dirname, '..', 'frontend', 'dist');
+  const indexHtml = path.join(frontendPath, 'index.html');
   app.use(express.static(frontendPath));
   app.get('*', (req, res) => {
-    res.sendFile(path.join(frontendPath, 'index.html'));
+    if (fs.existsSync(indexHtml)) {
+      res.sendFile(indexHtml);
+    } else {
+      res.json({ status: 'ok', msg: 'frontend não buildado' });
+    }
   });
 }
 
