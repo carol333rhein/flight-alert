@@ -505,3 +505,104 @@ a:hover { text-decoration: underline; }
 }
 
 .texto-vazio { color: var(--cinza-400); font-size: 14px; text-align: center; padding: 20px; }
+
+/* ===== Histórico — cards expansíveis ===== */
+.lista-historico {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rota-hist-card {
+  background: var(--branco);
+  border: 1px solid var(--cinza-200);
+  border-radius: var(--radius);
+  box-shadow: var(--sombra);
+  overflow: hidden;
+  transition: box-shadow 0.15s;
+}
+.rota-hist-card.aberto {
+  box-shadow: var(--sombra-md);
+  border-color: #bfdbfe;
+}
+
+.rota-hist-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 20px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+}
+.rota-hist-header:hover { background: var(--cinza-100); }
+
+.rota-hist-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.rota-hist-titulo {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--cinza-800);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rota-hist-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.meta-tag {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: 100px;
+  background: var(--cinza-100);
+  color: var(--cinza-600);
+  white-space: nowrap;
+}
+.meta-tag.limite { background: #eff6ff; color: var(--azul); }
+
+.rota-hist-direita {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.ultimo-preco {
+  font-size: 18px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.chevron {
+  font-size: 11px;
+  color: var(--cinza-400);
+  flex-shrink: 0;
+}
+
+.rota-hist-body {
+  padding: 0 20px 20px;
+  border-top: 1px solid var(--cinza-100);
+}
+
+/* Responsivo mobile */
+@media (max-width: 480px) {
+  .rota-hist-header { padding: 14px 16px; }
+  .rota-hist-titulo { font-size: 15px; }
+  .ultimo-preco { font-size: 15px; }
+  .rota-hist-body { padding: 0 16px 16px; }
+  .historico-resumo { grid-template-columns: 1fr 1fr; }
+}
