@@ -13,6 +13,7 @@ app.use(cors());
 app.use(express.json());
 
 // Rotas da API
+app.use('/api/auth', require('./routes/auth'));
 app.use('/api/rotas', require('./routes/alerts'));
 app.use('/api/historico', require('./routes/history'));
 

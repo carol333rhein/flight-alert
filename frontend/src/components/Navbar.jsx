@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 const links = [
   { to: '/', label: 'Minhas Rotas' },
@@ -11,6 +12,14 @@ const links = [
 export default function Navbar() {
   const [aberto, setAberto] = useState(false);
   const { pathname } = useLocation();
+  const { usuario, logout } = useAuth();
+  const navigate = useNavigate();
+
+  function handleLogout() {
+    logout();
+    navigate('/login');
+    setAberto(false);
+  }
 
   return (
     <nav className="navbar">
@@ -30,6 +39,14 @@ export default function Navbar() {
               {link.label}
             </Link>
           ))}
+          <div className="navbar-usuario">
+            <Link to="/perfil" className={`nav-link nav-link-usuario ${pathname === '/perfil' ? 'ativo' : ''}`}>
+              👤 {usuario?.nome?.split(' ')[0]}
+            </Link>
+            <button onClick={handleLogout} className="btn-logout">
+              Sair
+            </button>
+          </div>
         </div>
 
         {/* Hamburguer mobile */}
@@ -57,6 +74,16 @@ export default function Navbar() {
               {link.label}
             </Link>
           ))}
+          <Link
+            to="/perfil"
+            className={`nav-link-mobile ${pathname === '/perfil' ? 'ativo' : ''}`}
+            onClick={() => setAberto(false)}
+          >
+            👤 Meu Perfil
+          </Link>
+          <button onClick={handleLogout} className="nav-link-mobile btn-logout-mobile">
+            Sair
+          </button>
         </div>
       )}
     </nav>

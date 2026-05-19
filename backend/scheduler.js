@@ -50,7 +50,8 @@ async function verificarRota(rota) {
 
     if (agora - ultimoTarifario >= INTERVALO_ALERTA_MS) {
       try {
-        await enviarAlertaErroTarifario(rota, preco, media, linkCompra);
+        const usuario = rota.email_alertas ? rota : null;
+        await enviarAlertaErroTarifario(rota, preco, media, linkCompra, usuario);
         db.atualizarRota(rota.id, { ultimo_alerta_tarifario: new Date().toISOString() });
       } catch (e) {
         console.error('❌ Falha ao enviar alerta tarifário:', e.message);
@@ -69,7 +70,8 @@ async function verificarRota(rota) {
 
     if (agora - ultimoNormal >= INTERVALO_ALERTA_MS) {
       try {
-        await enviarAlertaNormal(rota, preco, linkCompra);
+        const usuario = rota.email_alertas ? rota : null;
+        await enviarAlertaNormal(rota, preco, linkCompra, usuario);
         db.atualizarRota(rota.id, { ultimo_alerta_normal: new Date().toISOString() });
       } catch (e) {
         console.error('❌ Falha ao enviar alerta normal:', e.message);

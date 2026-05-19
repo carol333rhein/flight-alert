@@ -1,40 +1,42 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
+const { autenticar } = require('../middleware/auth');
 const { verificarRota } = require('../scheduler');
 const { enviarEmailTeste } = require('../mailer');
 
-// GET /api/rotas — lista todas as rotas
+// Todas as rotas exigem autenticação
+router.use(autenticar);
+
+// GET /api/rotas
 router.get('/', (req, res) => {
   try {
-    const rotas = db.listarRotas();
-    res.json(rotas);
+    res.json(db.listarRotas(req.usuario.id));
   } catch (e) {
     res.status(500).json({ erro: e.message });
   }
 });
 
-// GET /api/rotas/:id — retorna uma rota específica
+// GET /api/rotas/:id
 router.get('/:id', (req, res) => {
   try {
     const rota = db.buscarRota(req.params.id);
-    if (!rota) return res.status(404).json({ erro: 'Rota não encontrada.' });
+    if (!rota || rota.user_id !== req.usuario.id) return res.status(404).json({ erro: 'Rota não encontrada.' });
     res.json(rota);
   } catch (e) {
     res.status(500).json({ erro: e.message });
   }
 });
 
-// POST /api/rotas — cria nova rota
+// POST /api/rotas
 router.post('/', (req, res) => {
   const { origem, destino, tipo_voo, data_ida, data_volta, flexivel, preco_maximo } = req.body;
-
   if (!origem || !destino || !preco_maximo) {
     return res.status(400).json({ erro: 'Campos obrigatórios: origem, destino, preco_maximo.' });
   }
-
   try {
     const resultado = db.criarRota({
+      user_id: req.usuario.id,
       origem: origem.toUpperCase().trim(),
       destino: destino.toUpperCase().trim(),
       tipo_voo: tipo_voo || 'ida_volta',
@@ -43,41 +45,37 @@ router.post('/', (req, res) => {
       flexivel: flexivel ? 1 : 0,
       preco_maximo: parseFloat(preco_maximo),
     });
-    const nova = db.buscarRota(resultado.lastInsertRowid);
-    res.status(201).json(nova);
+    res.status(201).json(db.buscarRota(resultado.lastInsertRowid));
   } catch (e) {
     res.status(500).json({ erro: e.message });
   }
 });
 
-// PATCH /api/rotas/:id — atualiza campos de uma rota (ex: ativa)
+// PATCH /api/rotas/:id
 router.patch('/:id', (req, res) => {
-  const campos = req.body;
+  const rota = db.buscarRota(req.params.id);
+  if (!rota || rota.user_id !== req.usuario.id) return res.status(404).json({ erro: 'Rota não encontrada.' });
+
   const camposPermitidos = ['ativa', 'preco_maximo', 'data_ida', 'data_volta', 'flexivel'];
   const update = {};
-
   for (const campo of camposPermitidos) {
-    if (campo in campos) update[campo] = campos[campo];
+    if (campo in req.body) update[campo] = req.body[campo];
   }
-
-  if (!Object.keys(update).length) {
-    return res.status(400).json({ erro: 'Nenhum campo válido para atualizar.' });
-  }
+  if (!Object.keys(update).length) return res.status(400).json({ erro: 'Nenhum campo válido.' });
 
   try {
     db.atualizarRota(req.params.id, update);
-    const atualizada = db.buscarRota(req.params.id);
-    res.json(atualizada);
+    res.json(db.buscarRota(req.params.id));
   } catch (e) {
     res.status(500).json({ erro: e.message });
   }
 });
 
-// DELETE /api/rotas/:id — remove uma rota e seu histórico
+// DELETE /api/rotas/:id
 router.delete('/:id', (req, res) => {
+  const rota = db.buscarRota(req.params.id);
+  if (!rota || rota.user_id !== req.usuario.id) return res.status(404).json({ erro: 'Rota não encontrada.' });
   try {
-    const rota = db.buscarRota(req.params.id);
-    if (!rota) return res.status(404).json({ erro: 'Rota não encontrada.' });
     db.deletarRota(req.params.id);
     res.json({ mensagem: 'Rota removida com sucesso.' });
   } catch (e) {
@@ -85,37 +83,29 @@ router.delete('/:id', (req, res) => {
   }
 });
 
-// POST /api/rotas/:id/verificar — dispara verificação manual imediata
+// POST /api/rotas/:id/verificar
 router.post('/:id/verificar', async (req, res) => {
-  try {
-    const rota = db.buscarRota(req.params.id);
-    if (!rota) return res.status(404).json({ erro: 'Rota não encontrada.' });
-    if (!rota.ativa) return res.status(400).json({ erro: 'Rota está desativada.' });
-
-    // Roda em background sem bloquear a resposta
-    verificarRota(rota).catch(e => console.error('Erro na verificação manual:', e));
-
-    res.json({ mensagem: 'Verificação iniciada. Aguarde alguns instantes.' });
-  } catch (e) {
-    res.status(500).json({ erro: e.message });
-  }
+  const rota = db.buscarRota(req.params.id);
+  if (!rota || rota.user_id !== req.usuario.id) return res.status(404).json({ erro: 'Rota não encontrada.' });
+  if (!rota.ativa) return res.status(400).json({ erro: 'Rota está desativada.' });
+  verificarRota(rota).catch(e => console.error('Erro na verificação manual:', e));
+  res.json({ mensagem: 'Verificação iniciada. Aguarde alguns instantes.' });
 });
 
-// GET /api/config — retorna configurações (sem expor senha)
+// GET /api/rotas/config/todas
 router.get('/config/todas', (req, res) => {
   try {
     const configs = db.getTodasConfigs();
-    // Oculta a senha na resposta
-    if (configs.email_pass) configs.email_pass = '••••••••';
+    if (configs.serpapi_key) configs.serpapi_key = '••••••••';
     res.json(configs);
   } catch (e) {
     res.status(500).json({ erro: e.message });
   }
 });
 
-// POST /api/config — salva configurações
+// POST /api/rotas/config/salvar
 router.post('/config/salvar', (req, res) => {
-  const campos = ['serpapi_key', 'email_user', 'email_pass', 'email_to', 'frequencia_horas'];
+  const campos = ['serpapi_key', 'frequencia_horas'];
   try {
     for (const campo of campos) {
       if (req.body[campo] !== undefined && req.body[campo] !== '••••••••') {
@@ -128,10 +118,11 @@ router.post('/config/salvar', (req, res) => {
   }
 });
 
-// POST /api/config/testar-email — envia email de teste
+// POST /api/rotas/config/testar-email
 router.post('/config/testar-email', async (req, res) => {
   try {
-    await enviarEmailTeste();
+    const usuario = db.buscarUsuarioPorId(req.usuario.id);
+    await enviarEmailTeste(usuario);
     res.json({ mensagem: 'Email de teste enviado com sucesso!' });
   } catch (e) {
     res.status(500).json({ erro: `Falha ao enviar email: ${e.message}` });

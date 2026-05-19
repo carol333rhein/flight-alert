@@ -18,8 +18,8 @@ function criarTransporte() {
   });
 }
 
-function getEmailDestino() {
-  return db.getConfig('email_to') || process.env.EMAIL_TO;
+function getEmailDestino(usuario) {
+  return usuario?.email_alertas || usuario?.email || db.getConfig('email_to') || process.env.EMAIL_TO;
 }
 
 /**
@@ -71,9 +71,9 @@ function layoutBase({ corBanner, tituloBanner, icone, conteudo }) {
 /**
  * Envia alerta normal quando preço está abaixo do limite definido.
  */
-async function enviarAlertaNormal(rota, preco, link) {
+async function enviarAlertaNormal(rota, preco, link, usuario) {
   const transporte = criarTransporte();
-  const destino = getEmailDestino();
+  const destino = getEmailDestino(usuario);
   const nomeRota = `${rota.origem} → ${rota.destino}`;
   const desconto = Math.round(((rota.preco_maximo - preco) / rota.preco_maximo) * 100);
 
@@ -126,9 +126,9 @@ async function enviarAlertaNormal(rota, preco, link) {
 /**
  * Envia alerta de possível erro tarifário quando preço é 40%+ abaixo da média histórica.
  */
-async function enviarAlertaErroTarifario(rota, preco, media, link) {
+async function enviarAlertaErroTarifario(rota, preco, media, link, usuario) {
   const transporte = criarTransporte();
-  const destino = getEmailDestino();
+  const destino = getEmailDestino(usuario);
   const nomeRota = `${rota.origem} → ${rota.destino}`;
   const percentualDesconto = Math.round(((media - preco) / media) * 100);
 
@@ -184,9 +184,9 @@ async function enviarAlertaErroTarifario(rota, preco, media, link) {
 /**
  * Envia um email de teste para confirmar as configurações.
  */
-async function enviarEmailTeste() {
+async function enviarEmailTeste(usuario) {
   const transporte = criarTransporte();
-  const destino = getEmailDestino();
+  const destino = getEmailDestino(usuario);
 
   const conteudo = `
     <div style="text-align:center;padding:20px;">

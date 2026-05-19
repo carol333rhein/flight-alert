@@ -5,13 +5,11 @@ const DB_PATH = path.join(__dirname, '..', 'flight-alert.db');
 
 let db = null;
 
-// Persiste o banco em disco após cada escrita
 function salvar() {
   const data = db.export();
   fs.writeFileSync(DB_PATH, Buffer.from(data));
 }
 
-// Executa SELECT e retorna array de objetos
 function query(sql, params) {
   const stmt = db.prepare(sql);
   const rows = [];
@@ -27,7 +25,6 @@ function queryOne(sql, params) {
   return query(sql, params)[0] || null;
 }
 
-// Executa INSERT/UPDATE/DELETE e salva automaticamente
 function run(sql, params) {
   db.run(sql, params || []);
   const lastId = db.exec('SELECT last_insert_rowid() as id')[0]?.values?.[0]?.[0] ?? null;
@@ -36,7 +33,6 @@ function run(sql, params) {
   return { lastInsertRowid: lastId, changes };
 }
 
-// Inicialização assíncrona (sql.js carrega o WASM)
 async function inicializar() {
   const initSqlJs = require('sql.js');
   const SQL = await initSqlJs();
@@ -48,8 +44,20 @@ async function inicializar() {
   }
 
   db.run(`
+    CREATE TABLE IF NOT EXISTS usuarios (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nome TEXT NOT NULL,
+      email TEXT UNIQUE NOT NULL,
+      senha_hash TEXT NOT NULL,
+      email_alertas TEXT,
+      criada_em DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.run(`
     CREATE TABLE IF NOT EXISTS rotas (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER REFERENCES usuarios(id),
       origem TEXT NOT NULL,
       destino TEXT NOT NULL,
       data_ida TEXT,
@@ -84,12 +92,8 @@ async function inicializar() {
     )
   `);
 
-  // Insere configs padrão se não existirem
   const defaults = [
     ['serpapi_key', process.env.SERPAPI_KEY || ''],
-    ['email_user', process.env.EMAIL_USER || ''],
-    ['email_pass', process.env.EMAIL_PASS || ''],
-    ['email_to', process.env.EMAIL_TO || ''],
     ['frequencia_horas', '6'],
   ];
   for (const [chave, valor] of defaults) {
@@ -101,14 +105,38 @@ async function inicializar() {
   return db;
 }
 
-// --- Helpers de rotas ---
+// --- Usuários ---
 
-function listarRotas() {
-  return query('SELECT * FROM rotas ORDER BY criada_em DESC');
+function criarUsuario(dados) {
+  return run(
+    'INSERT INTO usuarios (nome, email, senha_hash, email_alertas) VALUES (?, ?, ?, ?)',
+    [dados.nome, dados.email.toLowerCase(), dados.senha_hash, dados.email_alertas || dados.email.toLowerCase()]
+  );
+}
+
+function buscarUsuarioPorEmail(email) {
+  return queryOne('SELECT * FROM usuarios WHERE email = ?', [email.toLowerCase()]);
+}
+
+function buscarUsuarioPorId(id) {
+  return queryOne('SELECT id, nome, email, email_alertas, criada_em FROM usuarios WHERE id = ?', [id]);
+}
+
+function atualizarUsuario(id, campos) {
+  const chaves = Object.keys(campos);
+  const sets = chaves.map(k => `${k} = ?`).join(', ');
+  const valores = [...chaves.map(k => campos[k]), id];
+  return run(`UPDATE usuarios SET ${sets} WHERE id = ?`, valores);
+}
+
+// --- Rotas (com user_id) ---
+
+function listarRotas(userId) {
+  return query('SELECT * FROM rotas WHERE user_id = ? ORDER BY criada_em DESC', [userId]);
 }
 
 function listarRotasAtivas() {
-  return query('SELECT * FROM rotas WHERE ativa = 1');
+  return query('SELECT r.*, u.email_alertas FROM rotas r JOIN usuarios u ON r.user_id = u.id WHERE r.ativa = 1');
 }
 
 function buscarRota(id) {
@@ -117,8 +145,8 @@ function buscarRota(id) {
 
 function criarRota(dados) {
   return run(
-    'INSERT INTO rotas (origem, destino, tipo_voo, data_ida, data_volta, flexivel, preco_maximo) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    [dados.origem, dados.destino, dados.tipo_voo ?? 'ida_volta', dados.data_ida ?? null, dados.data_volta ?? null, dados.flexivel ?? 0, dados.preco_maximo]
+    'INSERT INTO rotas (user_id, origem, destino, tipo_voo, data_ida, data_volta, flexivel, preco_maximo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    [dados.user_id, dados.origem, dados.destino, dados.tipo_voo ?? 'ida_volta', dados.data_ida ?? null, dados.data_volta ?? null, dados.flexivel ?? 0, dados.preco_maximo]
   );
 }
 
@@ -134,7 +162,7 @@ function deletarRota(id) {
   return run('DELETE FROM rotas WHERE id = ?', [id]);
 }
 
-// --- Helpers de histórico ---
+// --- Histórico ---
 
 function salvarHistorico(dados) {
   return run(
@@ -159,7 +187,7 @@ function calcularMedia(rotaId, limite = 30) {
   return rows[0]?.values?.[0]?.[0] || null;
 }
 
-// --- Helpers de configuração ---
+// --- Configurações globais ---
 
 function getConfig(chave) {
   return queryOne('SELECT valor FROM configuracoes WHERE chave = ?', [chave])?.valor || null;
@@ -176,6 +204,7 @@ function getTodasConfigs() {
 
 module.exports = {
   inicializar,
+  criarUsuario, buscarUsuarioPorEmail, buscarUsuarioPorId, atualizarUsuario,
   listarRotas, listarRotasAtivas, buscarRota, criarRota, atualizarRota, deletarRota,
   salvarHistorico, buscarHistorico, calcularMedia,
   getConfig, setConfig, getTodasConfigs,
