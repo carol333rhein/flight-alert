@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import AeroportoInput from '../components/AeroportoInput';
 
 const CAMPOS_INICIAIS = {
   origem: '',
@@ -26,8 +27,8 @@ export default function NovaRota() {
 
   function validar() {
     const novosErros = {};
-    if (!form.origem.trim()) novosErros.origem = 'Informe o código do aeroporto de origem (ex: GRU).';
-    if (!form.destino.trim()) novosErros.destino = 'Informe o código do aeroporto de destino.';
+    if (!form.origem.trim()) novosErros.origem = 'Selecione o aeroporto de origem.';
+    if (!form.destino.trim()) novosErros.destino = 'Selecione o aeroporto de destino.';
     if (!form.preco_maximo || parseFloat(form.preco_maximo) <= 0)
       novosErros.preco_maximo = 'Informe um preço máximo válido.';
     if (!form.flexivel && !form.data_ida)
@@ -95,28 +96,25 @@ export default function NovaRota() {
 
           <div className="form-row">
             <div className="form-group">
-              <label>Aeroporto de Origem *</label>
-              <input
-                type="text"
-                className={`input ${erros.origem ? 'input-erro' : ''}`}
-                placeholder="Ex: GRU, SSA, BSB"
+              <label htmlFor="origem">Aeroporto de Origem *</label>
+              <AeroportoInput
+                id="origem"
                 value={form.origem}
-                onChange={e => atualizar('origem', e.target.value.toUpperCase())}
-                maxLength={3}
+                onChange={val => atualizar('origem', val)}
+                placeholder="Digite cidade, aeroporto ou código IATA"
+                erro={!!erros.origem}
               />
               {erros.origem && <span className="erro-campo">{erros.origem}</span>}
-              <span className="campo-dica">Código IATA de 3 letras</span>
             </div>
 
             <div className="form-group">
-              <label>Aeroporto de Destino *</label>
-              <input
-                type="text"
-                className={`input ${erros.destino ? 'input-erro' : ''}`}
-                placeholder="Ex: GIG, FOR, CNF"
+              <label htmlFor="destino">Aeroporto de Destino *</label>
+              <AeroportoInput
+                id="destino"
                 value={form.destino}
-                onChange={e => atualizar('destino', e.target.value.toUpperCase())}
-                maxLength={3}
+                onChange={val => atualizar('destino', val)}
+                placeholder="Digite cidade, aeroporto ou código IATA"
+                erro={!!erros.destino}
               />
               {erros.destino && <span className="erro-campo">{erros.destino}</span>}
             </div>
