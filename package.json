@@ -10,6 +10,7 @@
     "install:all": "npm install && npm install --prefix frontend"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.49.4",
     "axios": "^1.6.8",
     "bcryptjs": "^3.0.3",
     "concurrently": "^8.2.2",
@@ -19,6 +20,6 @@
     "jsonwebtoken": "^9.0.3",
     "node-cron": "^3.0.3",
     "nodemailer": "^6.9.12",
-    "@supabase/supabase-js": "^2.49.4"
+    "resend": "^6.12.3"
   }
 }

@@ -1,22 +1,10 @@
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 const db = require('./database');
 
-async function criarTransporte() {
-  const user = (await db.getConfig('email_user')) || process.env.EMAIL_USER;
-  const pass = (await db.getConfig('email_pass')) || process.env.EMAIL_PASS;
-
-  if (!user || !pass) {
-    throw new Error('Credenciais de email não configuradas.');
-  }
-
-  return nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
-    auth: { user, pass },
-    connectionTimeout: 10000,
-    socketTimeout: 10000,
-  });
+async function criarResend() {
+  const apiKey = (await db.getConfig('resend_api_key')) || process.env.RESEND_API_KEY;
+  if (!apiKey) throw new Error('Resend API key não configurada.');
+  return new Resend(apiKey);
 }
 
 function getEmailDestino(usuario) {
@@ -67,11 +55,10 @@ function layoutBase({ corBanner, tituloBanner, icone, conteudo }) {
 }
 
 async function enviarAlertaNormal(rota, preco, link, usuario) {
-  const transporte = await criarTransporte();
+  const resend = await criarResend();
   const destino = getEmailDestino(usuario);
   const nomeRota = `${rota.origem} → ${rota.destino}`;
   const desconto = Math.round(((rota.preco_maximo - preco) / rota.preco_maximo) * 100);
-  const emailUser = (await db.getConfig('email_user')) || process.env.EMAIL_USER;
 
   const conteudo = `
     <div class="rota">✈️ ${nomeRota}</div>
@@ -87,9 +74,9 @@ async function enviarAlertaNormal(rota, preco, link, usuario) {
     <p style="text-align:center;color:#666;font-size:13px;">Preço verificado em ${new Date().toLocaleString('pt-BR')}</p>
   `;
 
-  await transporte.sendMail({
-    from: `"✈️ Flight Alert" <${emailUser}>`,
-    to: destino,
+  await resend.emails.send({
+    from: 'Flight Alert <onboarding@resend.dev>',
+    to: [destino],
     subject: `🎯 Passagem abaixo do limite: ${nomeRota} — R$ ${preco.toFixed(2)}`,
     html: layoutBase({ corBanner: '#2563eb', tituloBanner: 'Alerta de Preço!', icone: '🎯', conteudo }),
   });
@@ -98,11 +85,10 @@ async function enviarAlertaNormal(rota, preco, link, usuario) {
 }
 
 async function enviarAlertaErroTarifario(rota, preco, media, link, usuario) {
-  const transporte = await criarTransporte();
+  const resend = await criarResend();
   const destino = getEmailDestino(usuario);
   const nomeRota = `${rota.origem} → ${rota.destino}`;
   const percentualDesconto = Math.round(((media - preco) / media) * 100);
-  const emailUser = (await db.getConfig('email_user')) || process.env.EMAIL_USER;
 
   const conteudo = `
     <div style="background:#fef2f2;border:2px solid #ef4444;border-radius:8px;padding:16px;margin-bottom:24px;text-align:center;">
@@ -121,9 +107,9 @@ async function enviarAlertaErroTarifario(rota, preco, media, link, usuario) {
     <p style="text-align:center;color:#666;font-size:13px;">Verificado em ${new Date().toLocaleString('pt-BR')} — Preços mudam rapidamente</p>
   `;
 
-  await transporte.sendMail({
-    from: `"✈️ Flight Alert" <${emailUser}>`,
-    to: destino,
+  await resend.emails.send({
+    from: 'Flight Alert <onboarding@resend.dev>',
+    to: [destino],
     subject: `🚨 POSSÍVEL ERRO TARIFÁRIO: ${nomeRota} — R$ ${preco.toFixed(2)} (${percentualDesconto}% off)`,
     html: layoutBase({ corBanner: '#dc2626', tituloBanner: 'POSSÍVEL ERRO TARIFÁRIO', icone: '🚨', conteudo }),
   });
@@ -132,9 +118,8 @@ async function enviarAlertaErroTarifario(rota, preco, media, link, usuario) {
 }
 
 async function enviarEmailTeste(usuario) {
-  const transporte = await criarTransporte();
+  const resend = await criarResend();
   const destino = getEmailDestino(usuario);
-  const emailUser = (await db.getConfig('email_user')) || process.env.EMAIL_USER;
 
   const conteudo = `
     <div style="text-align:center;padding:20px;">
@@ -147,9 +132,9 @@ async function enviarEmailTeste(usuario) {
     </div>
   `;
 
-  await transporte.sendMail({
-    from: `"✈️ Flight Alert" <${emailUser}>`,
-    to: destino,
+  await resend.emails.send({
+    from: 'Flight Alert <onboarding@resend.dev>',
+    to: [destino],
     subject: '✅ Flight Alert — Teste de configuração',
     html: layoutBase({ corBanner: '#16a34a', tituloBanner: 'Email de Teste', icone: '✅', conteudo }),
   });
@@ -164,8 +149,7 @@ function formatarData(dataStr) {
 }
 
 async function enviarEmailRedefinicao(usuario, link) {
-  const transporte = await criarTransporte();
-  const emailUser = (await db.getConfig('email_user')) || process.env.EMAIL_USER;
+  const resend = await criarResend();
 
   const conteudo = `
     <div style="text-align:center;padding:20px;">
@@ -173,13 +157,13 @@ async function enviarEmailRedefinicao(usuario, link) {
       <h2 style="color:#333;">Redefinir sua senha</h2>
       <p style="color:#666;margin-bottom:24px;">Clique no botão abaixo para criar uma nova senha. O link expira em <strong>1 hora</strong>.</p>
       <a href="${link}" class="btn">Redefinir senha →</a>
-      <p style="color:#999;font-size:12px;margin-top:24px;">Se você não solicitou a redefinição, ignore este email. Sua senha não será alterada.</p>
+      <p style="color:#999;font-size:12px;margin-top:24px;">Se você não solicitou a redefinição, ignore este email.</p>
     </div>
   `;
 
-  await transporte.sendMail({
-    from: `"✈️ Flight Alert" <${emailUser}>`,
-    to: usuario.email_alertas || usuario.email,
+  await resend.emails.send({
+    from: 'Flight Alert <onboarding@resend.dev>',
+    to: [usuario.email_alertas || usuario.email],
     subject: '🔐 Flight Alert — Redefinir senha',
     html: layoutBase({ corBanner: '#2563eb', tituloBanner: 'Redefinir Senha', icone: '🔐', conteudo }),
   });

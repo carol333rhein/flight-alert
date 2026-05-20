@@ -44,13 +44,9 @@ router.post('/config/salvar', async (req, res) => {
 
 // POST /api/rotas/config/testar-email
 router.post('/config/testar-email', async (req, res) => {
-  const timeout = new Promise((_, reject) =>
-    setTimeout(() => reject(new Error('Timeout: servidor de email não respondeu em 12 segundos.')), 12000)
-  );
   try {
     const usuario = await db.buscarUsuarioPorId(req.usuario.id);
-    console.log(`📧 Tentando enviar email de teste para ${usuario?.email_alertas || usuario?.email}`);
-    await Promise.race([enviarEmailTeste(usuario), timeout]);
+    await enviarEmailTeste(usuario);
     res.json({ mensagem: 'Email de teste enviado com sucesso!' });
   } catch (e) {
     console.error('❌ Erro no email de teste:', e.message);
